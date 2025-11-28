@@ -12,8 +12,8 @@ class UIEngine:
 
         # Colors and fonts
         self.bg_color = (28, 28, 28)  # darker background
-        self.text_color = (245, 245, 245)  # brighter text for readability
-        self.highlight_color = (0, 200, 255)  # brighter cyan for highlights
+        self.text_color = (245, 245, 245)  # brighter text
+        self.highlight_color = (0, 200, 255)  # highlights
         self.deck_bg_color = (60, 60, 60)  # lighter deck backgrounds
         self.selection_color = (0, 150, 255)  # stronger selection color
         self.scrollbar_color = (100, 100, 100)
@@ -83,9 +83,6 @@ class UIEngine:
     def draw(self, deck1_song_list, deck2_song_list, deck1_current=None, deck2_current=None):
         img = np.full((self.height, self.width, 3), self.bg_color, dtype=np.uint8)
 
-        status_text = f"Deck1: {len(deck1_song_list)} songs  |  Deck2: {len(deck2_song_list)} songs"
-        cv2.putText(img, status_text, (self.margin, 18), self.font, 0.6, self.text_color, 2, cv2.LINE_AA)
-
         try:
             playing_idx1 = deck1_song_list.index(deck1_current) if deck1_current in deck1_song_list else None
         except Exception:
@@ -112,10 +109,10 @@ class UIEngine:
                                                  self.list_item_height, self.scrollbar_width, self.playing_color,
                                                  self.selection_color, self.scrollbar_color, self.scrollbar_handle_color,
                                                  self.font, self.text_color, self.selected_song_deck1, playing_index=playing_idx1)
-        self.deck2_scroll = draw_scrollable_list(img, list_rect1, deck1_song_list, self.deck1_scroll, self.deck_bg_color,
+        self.deck2_scroll = draw_scrollable_list(img, list_rect2, deck2_song_list, self.deck2_scroll, self.deck_bg_color,
                                                  self.list_item_height, self.scrollbar_width, self.playing_color,
                                                  self.selection_color, self.scrollbar_color, self.scrollbar_handle_color,
-                                                 self.font, self.text_color, self.selected_song_deck1, playing_index=playing_idx1)
+                                                 self.font, self.text_color, self.selected_song_deck1, playing_index=playing_idx2)
 
 
         # Draw center decks area
