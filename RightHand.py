@@ -35,6 +35,14 @@ class RightHand:
         except (IndexError, AttributeError):
             return None
 
+    def get_index_tip_position(self):
+        """
+        Get the position of the index fingertip (landmark 8).
+        Returns (x, y) in normalized coordinates [0, 1], or None if unavailable.
+        """
+        index_tip = self.landmarks[8]
+        return index_tip.x, index_tip.y
+
     def _distance(self, lm1, lm2):
         """Compute Euclidean distance between two landmarks."""
         if lm1 is None or lm2 is None:
