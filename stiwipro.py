@@ -1,0 +1,69 @@
+import os
+import glob
+
+from AudioEngine import AudioEngine
+from UIEngine import UIEngine
+from VisionEngine import VisionEngine
+
+
+def load_songs_from_directory(directory_path):
+    """Load all audio files from directory into a song list."""
+    supported_formats = ['*.wav', '*.mp3', '*.flac', '*.m4a', '*.ogg']
+    songs = []
+
+    for pattern in supported_formats:
+        files = glob.glob(os.path.join(directory_path, pattern)) + \
+                glob.glob(os.path.join(directory_path, pattern.upper()))
+        songs.extend(files)
+
+    valid_songs = []
+    for full_path in songs:
+        if os.path.exists(full_path):
+            filename = os.path.basename(full_path)
+            valid_songs.append({
+                'path': full_path,
+                'name': os.path.splitext(filename)[0]
+            })
+
+    return sorted(valid_songs, key=lambda x: x['name'])
+
+
+def main():
+    music_directory = "music"
+    if not os.path.exists(music_directory):
+        print(f"Creating music directory: {music_directory}")
+        os.makedirs(music_directory)
+        print("Please add .wav, .mp3, .flac, .m4a, or .ogg files to the 'music' folder.")
+        return
+
+    song_list = load_songs_from_directory(music_directory)
+    if not song_list:
+        print("No audio files found in music directory. Add some songs!")
+        return
+
+    ui = UIEngine()
+    ui.set_song_list(1, [song['name'] for song in song_list])
+    ui.set_song_list(2, [song['name'] for song in song_list])
+
+    first_song_name = None
+    if song_list:
+        audio_engine = AudioEngine(song_list[0]['path'])
+        audio_engine.start()
+        first_song_name = song_list[0]['name']
+        ui.draw(ui.deck1_songs, ui.deck2_songs, first_song_name, None)
+    else:
+        audio_engine = None
+        ui.draw([], [], None, None)
+
+    vision = VisionEngine(audio_engine, ui, song_list)
+    if first_song_name:
+        vision.deck1_current_song = first_song_name
+        print(f"stiwipro: set vision.deck1_current_song = {first_song_name}")
+    vision.process()
+
+    if audio_engine:
+        audio_engine.stop()
+
+
+if __name__ == "__main__":
+    main()
