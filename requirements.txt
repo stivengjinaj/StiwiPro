@@ -1,3 +1,4 @@
+pedalboard
 absl-py==2.3.1
 attrs==25.4.0
 cffi==2.0.0
