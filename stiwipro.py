@@ -48,7 +48,7 @@ def main():
     first_song_name = None
     if song_list:
         audio_engine = AudioEngine(song_list[0]['path'])
-        audio_engine.start()
+        # audio_engine.start()
         first_song_name = song_list[0]['name']
         ui.draw(ui.deck1_songs, ui.deck2_songs, first_song_name, None)
     else:

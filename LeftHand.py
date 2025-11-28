@@ -72,7 +72,7 @@ class LeftHand:
 
     def get_hand_position(self):
         """
-        Get the position of the hand (using middle finger tip as representative point).
+        Get the position of the hand (using middle fingertip as representative point).
         Returns (x, y) in normalized coordinates [0, 1], or None if landmarks unavailable.
         """
         if self.landmarks is None:

@@ -18,6 +18,7 @@ class AudioEngine:
 
         self.position = 0.0
         self.is_playing = True
+        self.is_paused = False
 
         self.target_volume = 1.0
         self.current_volume = 1.0
@@ -48,6 +49,10 @@ class AudioEngine:
             print(status)
 
         if not self.is_playing:
+            outdata.fill(0)
+            return
+
+        if self.is_paused:
             outdata.fill(0)
             return
 
@@ -141,6 +146,12 @@ class AudioEngine:
 
         outdata[:] = chunk
 
+    def toggle_playback(self):
+        if self.is_paused:
+            self.resume()
+        else:
+            self.pause()
+
     def start(self):
         self.stream = sd.OutputStream(
             samplerate=self.samplerate,
@@ -149,12 +160,23 @@ class AudioEngine:
             blocksize=1024
         )
         self.stream.start()
+        self.is_paused = False
 
     def stop(self):
         self.is_playing = False
         if hasattr(self, 'stream'):
             self.stream.stop()
             self.stream.close()
+        self.is_paused = False
+
+    def pause(self):
+        if hasattr(self, 'stream') and self.stream.active:
+            self.is_paused = True
+
+    def resume(self):
+        """Resume playback from current position."""
+        if hasattr(self, 'stream') and self.stream.active:
+            self.is_paused = False
 
 
     def set_pitch(self, val):

@@ -26,8 +26,6 @@ class VisionEngine:
         self.deck2_current_song = None
         self.deck1_current_path = None
         self.deck2_current_path = None
-        # UI overlay mode: 'blend', 'opaque' (show only UI), 'hidden' (show only camera)
-        # Default to 'blend' so the camera is visible by default; press 'u' to toggle modes.
         self.ui_mode = 'blend'
 
         # Left-hand drag-and-drop state
@@ -37,6 +35,8 @@ class VisionEngine:
 
         # Track previous pinch state manually to fix drop detection bug
         self.prev_left_pinch = False
+        self.prev_right_pinch = False
+        self.is_playing = True
 
     def process(self):
         while self.running:
@@ -64,6 +64,8 @@ class VisionEngine:
             left_gestures = self.left_hand.detect_gestures()
             right_gestures = self.right_hand.detect_gestures()
 
+            self.handle_right_play_pause()
+
             self.handle_left_hover()
             self.handle_left_drag_drop()
 
@@ -73,20 +75,22 @@ class VisionEngine:
                 self.mp_drawing.draw_landmarks(frame, results.multi_hand_landmarks[
                     0] if results.multi_hand_landmarks else None, self.mp_hands.HAND_CONNECTIONS)
             if self.right_hand.landmarks:
-                # Note: This logic for drawing is simplified based on your snippet;
-                # ideally we iterate results.multi_hand_landmarks to draw, but keeping structure as requested.
                 pass
 
-            # Drawing landmarks using the standard loop to ensure visual feedback
             if results.multi_hand_landmarks:
                 for hand_lms in results.multi_hand_landmarks:
                     self.mp_drawing.draw_landmarks(frame, hand_lms, self.mp_hands.HAND_CONNECTIONS)
+
+            if self.audio_engine:
+                self.is_playing = not self.audio_engine.is_paused
+            else:
+                self.is_playing = False
 
             img = self.ui.draw(
                 self.ui.deck1_songs,
                 self.ui.deck2_songs,
                 self.deck1_current_song,
-                self.deck2_current_song
+                self.deck2_current_song,
             )
             frame_height, frame_width = frame.shape[:2]
             ui_resized = cv2.resize(img, (frame_width, frame_height))
@@ -143,16 +147,6 @@ class VisionEngine:
             self.ui.selected_song_deck1 = song_idx
 
     def handle_gestures(self, left_gestures, right_gestures):
-        if 'pinch_index_thumb' in right_gestures:
-            self.audio_engine.set_pitch(0.8)
-        else:
-            self.audio_engine.set_pitch(0.5)
-
-        if 'pinch_middle_thumb' in left_gestures:
-            self.audio_engine.set_reverb(0.5)
-        else:
-            self.audio_engine.set_reverb(0.0)
-
         drop_result = self.ui.drop_song("deck1")
         if drop_result:
             song_name, from_deck, target_deck = drop_result
@@ -228,6 +222,51 @@ class VisionEngine:
             return None
 
         return song_index
+
+    def _is_position_over_play_button(self, hand_pos):
+        """
+        Check if a normalized hand position (x, y) is over the play/pause button.
+        Returns True if inside the button circle, False otherwise.
+        Uses point-in-circle collision detection.
+        """
+        if hand_pos is None:
+            return False
+
+        button_x = 640
+        button_y = 500
+        button_radius = 40
+
+        hand_pixel_x = hand_pos[0] * self.ui.width
+        hand_pixel_y = hand_pos[1] * self.ui.height
+
+        # Point-in-circle collision: distance from hand to button center
+        dist_x = hand_pixel_x - button_x
+        dist_y = hand_pixel_y - button_y
+        distance = (dist_x ** 2 + dist_y ** 2) ** 0.5
+
+        # Hand is inside button if distance < radius
+        return distance <= button_radius
+
+    def handle_right_play_pause(self):
+        """
+        Handle right-hand pinch over play/pause button to toggle playback.
+        Uses rising edge detection (pinch just started) to avoid repeated toggles.
+        """
+        if self.right_hand.landmarks is None:
+            self.prev_right_pinch = False
+            return
+
+        pinch_pos = self.right_hand.get_pinch_position()
+
+        is_pinching = self.right_hand.is_currently_pinching
+        pinch_started = is_pinching and not self.prev_right_pinch
+
+        self.prev_right_pinch = is_pinching
+
+        if pinch_started and self._is_position_over_play_button(pinch_pos):
+            if self.audio_engine:
+                self.audio_engine.toggle_playback()
+                self.is_playing = not self.audio_engine.is_paused
 
     def handle_left_drag_drop(self):
         """

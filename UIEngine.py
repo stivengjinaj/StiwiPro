@@ -1,6 +1,8 @@
 import cv2
 import numpy as np
 
+from ui_helpers import draw_play_button, draw_deck, draw_scrollable_list
+
 
 class UIEngine:
     def __init__(self, window_name="Stiwi Pro", width=1280, height=720):
@@ -58,59 +60,7 @@ class UIEngine:
             self.deck2_scroll = 0
             self.selected_song_deck2 = None
 
-    def draw_scrollable_list(self, img, rect, songs, scroll, selected_index=None, playing_index=None):
-        x, y, w, h = rect
-        cv2.rectangle(img, (x, y), (x + w, y + h), self.deck_bg_color, -1)
-
-        visible_items = h // self.list_item_height
-        total_items = len(songs)
-        max_scroll = max(0, total_items - visible_items)
-
-        scroll = max(0, min(scroll, max_scroll))
-
-        start_idx = scroll
-        end_idx = min(total_items, scroll + visible_items)
-
-        text_x = x + 10
-        text_y = y + self.list_item_height - 8
-
-        for i in range(start_idx, end_idx):
-            item_y = y + (i - start_idx) * self.list_item_height
-            if playing_index is not None and i == playing_index:
-                cv2.rectangle(img, (x, item_y), (x + w - self.scrollbar_width, item_y + self.list_item_height),
-                              self.playing_color, -1)
-            elif i == selected_index:
-                cv2.rectangle(img, (x, item_y), (x + w - self.scrollbar_width, item_y + self.list_item_height),
-                              self.selection_color, -1)
-            cv2.putText(img, songs[i], (text_x, item_y + self.list_item_height - 10), self.font, 0.6, self.text_color,
-                        1, cv2.LINE_AA)
-
-        if max_scroll > 0:
-            scrollbar_x = x + w - self.scrollbar_width
-            cv2.rectangle(img, (scrollbar_x, y), (scrollbar_x + self.scrollbar_width, y + h), self.scrollbar_color, -1)
-            handle_height = max(20, int(h * (visible_items / total_items)))
-            handle_y = int(y + (scroll / max_scroll) * (h - handle_height))
-            cv2.rectangle(img, (scrollbar_x, handle_y), (scrollbar_x + self.scrollbar_width, handle_y + handle_height),
-                          self.scrollbar_handle_color, -1)
-
-        return scroll
-
-    def draw_deck(self, img, rect, title, current_song=None):
-        x, y, w, h = rect
-        cv2.rectangle(img, (x, y), (x + w, y + h), self.deck_bg_color, -1)
-        cv2.putText(img, title, (x + 10, y + 25), self.font, 0.8, self.text_color, 2, cv2.LINE_AA)
-
-        song_box_y = y + 40
-        song_box_h = 50
-        cv2.rectangle(img, (x + 10, song_box_y), (x + w - 10, song_box_y + song_box_h), (70, 70, 70), -1)
-        if current_song:
-            cv2.putText(img, current_song, (x + 15, song_box_y + 35), self.font, 0.7, self.highlight_color, 2,
-                        cv2.LINE_AA)
-        else:
-            cv2.putText(img, "No song loaded", (x + 15, song_box_y + 35), self.font, 0.7, (120, 120, 120), 1,
-                        cv2.LINE_AA)
-
-    def draw_center_decks(self, img, rect, deck1_current=None, deck2_current=None):
+    def draw_center_decks(self, img, rect, deck1_current=None, deck2_current=None, is_playing = False):
         x, y, w, h = rect
         cv2.rectangle(img, (x, y), (x + w, y + h), (45, 45, 45), -1)
         cv2.putText(img, "Deck Controls Area", (x + 10, y + 30), self.font, 0.8, self.text_color, 1,
@@ -120,6 +70,15 @@ class UIEngine:
             cv2.putText(img, deck1_current,(x+5, y+70), self.font, 0.8, self.text_color, 1, cv2.LINE_4)
         if deck2_current:
             cv2.putText(img, deck2_current,(x+50, y+70), self.font, 0.8, self.text_color, 1, cv2.LINE_4)
+
+    def draw_play_pause_controls(self, img, rect, deck_num=1, is_playing=False):
+        x, y, w, h = rect
+
+        button_x = x + w // 2
+        button_y = y + h // 2
+        button_radius = min(w, h) // 4
+
+        draw_play_button(img, button_x, button_y, self.deck_bg_color, self.highlight_color, button_radius, is_playing)
 
     def draw(self, deck1_song_list, deck2_song_list, deck1_current=None, deck2_current=None):
         img = np.full((self.height, self.width, 3), self.bg_color, dtype=np.uint8)
@@ -137,8 +96,8 @@ class UIEngine:
             playing_idx2 = None
 
         # Draw decks (header + current song box) first so they don't overwrite the lists
-        self.draw_deck(img, self.deck1_rect, "Deck 1", deck1_current)
-        self.draw_deck(img, self.deck2_rect, "Deck 2", deck2_current)
+        draw_deck(img, self.deck1_rect, "Deck 1", self.deck_bg_color, self.font, self.text_color, self.highlight_color, deck1_current)
+        draw_deck(img, self.deck2_rect, "Deck 2", self.deck_bg_color, self.font, self.text_color, self.highlight_color, deck2_current)
 
         # Compute list rects placed below the deck header/current-song box so items remain visible
         # Using same deck rect but offset down by 100px to leave space for the title and current-song box
@@ -149,15 +108,21 @@ class UIEngine:
         list_rect2 = (d2x, d2y + list_offset, d2w, max(0, d2h - list_offset))
 
         # Draw song lists, passing both selected and playing indices
-        self.deck1_scroll = self.draw_scrollable_list(img, list_rect1, deck1_song_list, self.deck1_scroll,
-                                                      self.selected_song_deck1, playing_index=playing_idx1)
-        self.deck2_scroll = self.draw_scrollable_list(img, list_rect2, deck2_song_list, self.deck2_scroll,
-                                                      self.selected_song_deck2, playing_index=playing_idx2)
+        self.deck1_scroll = draw_scrollable_list(img, list_rect1, deck1_song_list, self.deck1_scroll, self.deck_bg_color,
+                                                 self.list_item_height, self.scrollbar_width, self.playing_color,
+                                                 self.selection_color, self.scrollbar_color, self.scrollbar_handle_color,
+                                                 self.font, self.text_color, self.selected_song_deck1, playing_index=playing_idx1)
+        self.deck2_scroll = draw_scrollable_list(img, list_rect1, deck1_song_list, self.deck1_scroll, self.deck_bg_color,
+                                                 self.list_item_height, self.scrollbar_width, self.playing_color,
+                                                 self.selection_color, self.scrollbar_color, self.scrollbar_handle_color,
+                                                 self.font, self.text_color, self.selected_song_deck1, playing_index=playing_idx1)
 
 
         # Draw center decks area
         self.draw_center_decks(img, self.center_decks_rect, deck1_current, deck2_current)
 
+        # Draw play button
+        draw_play_button(img, 640, 500, self.deck_bg_color, self.highlight_color, radius=40, is_playing=True)
         # Draw dragging song if any
         if self.dragging_song:
             pos = self.dragging_position
