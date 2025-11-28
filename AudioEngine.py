@@ -5,16 +5,14 @@ import soundfile as sf
 import sounddevice as sd
 from pedalboard import Pedalboard, Gain, Compressor, Reverb, Delay, Chorus, Phaser, \
     LowpassFilter, HighpassFilter, PitchShift, Distortion, Limiter, Bitcrush
-from pedalboard.io import AudioFile
 
 
-class AdvancedAudioEngine:
+class AudioEngine:
     def __init__(self, file_path):
         if not os.path.exists(file_path):
             print(f"Error: Could not find '{file_path}'.")
             sys.exit(1)
 
-        # Load audio file
         self.data, self.samplerate = sf.read(file_path, dtype='float32')
         if self.data.ndim == 1:
             self.data = np.column_stack((self.data, self.data))
@@ -33,7 +31,7 @@ class AdvancedAudioEngine:
             HighpassFilter(cutoff_frequency_hz=20),
             PitchShift(semitones=0),
             Distortion(drive_db=0),
-            Bitcrush(bits=16),
+            Bitcrush(bit_depth=16),
             Limiter(threshold_db=-9, release_ms=10)
         ])
 
@@ -89,8 +87,11 @@ class AdvancedAudioEngine:
         self.board[9].drive_db = self.controls['distortion'] * 24
 
         # Bitcrush
-        bits = np.interp(self.controls['bitcrush'], [0, 1], [16, 4])
-        self.board[10].bits = int(max(4, bits))
+        bit_depth = np.interp(self.controls['bitcrush'], [0, 1], [16, 4])
+        for plugin in self.board:
+            if isinstance(plugin, Bitcrush):
+                plugin.bit_depth = float(max(4, bit_depth))
+                break
 
     def callback(self, outdata, frames, time, status):
         if status:
@@ -103,16 +104,57 @@ class AdvancedAudioEngine:
         read_len = frames
         current_pos_int = int(self.position)
 
-        if current_pos_int + read_len >= len(self.data):
-            self.position = 0
-            current_pos_int = 0
+        # Read audio data and wrap around if we reach the end (loop playback)
+        if current_pos_int + read_len <= len(self.data):
+            chunk = self.data[current_pos_int: current_pos_int + read_len]
+            self.position = current_pos_int + read_len
+        else:
+            # Wrap: take remainder from end, then the rest from start
+            part1 = self.data[current_pos_int:]
+            need = read_len - part1.shape[0]
+            part2 = self.data[0:need]
+            if part1.size == 0:
+                chunk = part2
+            else:
+                chunk = np.vstack((part1, part2))
+            # New position is after the part we took from the start
+            self.position = need
 
-        chunk = self.data[current_pos_int: current_pos_int + read_len]
-
+        # Process chunk through the pedalboard.
         effected = self.board(chunk, self.samplerate, reset=False)
 
-        outdata[:] = effected
-        self.position += read_len
+        # If plugin returned no output, fill silence
+        if effected is None or effected.size == 0:
+            outdata.fill(0)
+            return
+
+        # Ensure effected has the same number of channels as outdata
+        # outdata shape is (frames, channels)
+        if effected.ndim == 1:
+            effected = np.column_stack((effected, effected))
+
+        # If plugin returned fewer frames, copy what we have and zero-fill the rest
+        eff_len = effected.shape[0]
+        out_ch = outdata.shape[1]
+        # If plugin returned a different number of channels, adapt (truncate or duplicate)
+        if effected.shape[1] != out_ch:
+            if effected.shape[1] == 1 and out_ch == 2:
+                effected = np.tile(effected, (1, 2))
+            else:
+                # Truncate or pad channels as needed
+                if effected.shape[1] > out_ch:
+                    effected = effected[:, :out_ch]
+                else:
+                    # pad with zeros
+                    pad_width = out_ch - effected.shape[1]
+                    effected = np.hstack((effected, np.zeros((eff_len, pad_width), dtype=effected.dtype)))
+
+        if eff_len >= frames:
+            outdata[:] = effected[:frames]
+        else:
+            outdata[:eff_len] = effected
+            outdata[eff_len:] = 0
+        return
 
     def start(self):
         self.stream = sd.OutputStream(
