@@ -3,8 +3,6 @@ import sys
 import numpy as np
 import soundfile as sf
 import sounddevice as sd
-from pedalboard import Pedalboard, Gain, Compressor, Reverb, Delay, Chorus, Phaser, \
-    LowpassFilter, HighpassFilter, PitchShift, Distortion, Limiter, Bitcrush
 
 
 class AudioEngine:
@@ -14,86 +12,38 @@ class AudioEngine:
             sys.exit(1)
 
         self.data, self.samplerate = sf.read(file_path, dtype='float32')
+
         if self.data.ndim == 1:
             self.data = np.column_stack((self.data, self.data))
 
         self.position = 0.0
         self.is_playing = True
 
-        self.board = Pedalboard([
-            Gain(gain_db=0),  # Master volume
-            Compressor(threshold_db=-24, ratio=4, attack_ms=5, release_ms=100),
-            Reverb(room_size=0.5, wet_level=0.33),
-            Delay(delay_seconds=0.25, feedback=0.45),
-            Chorus(),
-            Phaser(),
-            LowpassFilter(cutoff_frequency_hz=20000),
-            HighpassFilter(cutoff_frequency_hz=20),
-            PitchShift(semitones=0),
-            Distortion(drive_db=0),
-            Bitcrush(bit_depth=16),
-            Limiter(threshold_db=-9, release_ms=10)
-        ])
+        self.target_volume = 1.0
+        self.current_volume = 1.0
 
-        self.controls = {
-            'volume': 1.0,
-            'pitch': 0.0,  # -12 to +12 semitones
-            'reverb': 0.0,
-            'delay': 0.0,
-            'chorus': 0.0,
-            'phaser': 0.0,
-            'lowpass': 1.0,  # 1.0 = full open
-            'highpass': 0.0,  # 0.0 = full open
-            'distortion': 0.0,
-            'bitcrush': 0.0,  # 0=16bit, 1=1bit
-            'compressor': 1.0
-        }
+        self.target_pitch = 1.0
+        self.current_pitch = 1.0
 
-        self.update_pedalboard()
+        self.target_pan = 0.5
+        self.current_pan = 0.5
 
-    def update_pedalboard(self):
-        """Update all plugin parameters based on current controls."""
-        self.board[0].gain_db = np.clip(self.controls['volume'] * 12 - 6, -60, 12)  # -6 to +6dB
+        self.target_echo = 0.0
+        self.current_echo = 0.0
 
-        # Compressor
-        comp_ratio = np.interp(self.controls['compressor'], [0, 1], [2, 20])
-        self.board[1].ratio = comp_ratio
-        self.board[1].threshold_db = np.interp(self.controls['compressor'], [0, 1], [-30, -12])
+        self.smooth_vol = 0.1
+        self.smooth_pitch = 0.05
+        self.smooth_pan = 0.15
+        self.smooth_echo = 0.1
 
-        # Reverb
-        self.board[2].wet_level = self.controls['reverb'] * 0.8
-        self.board[2].room_size = 0.3 + self.controls['reverb'] * 0.4
-
-        # Delay
-        self.board[3].mix = self.controls['delay']
-        self.board[3].feedback = 0.3 + self.controls['delay'] * 0.4
-
-        # Chorus
-        self.board[4].mix = self.controls['chorus']
-        self.board[4].rate_hz = 0.5 + self.controls['chorus'] * 2.0
-
-        # Phaser
-        self.board[5].mix = self.controls['phaser']
-        self.board[5].rate_hz = 0.3 + self.controls['phaser'] * 1.5
-
-        # Filters
-        self.board[6].cutoff_frequency_hz = np.interp(self.controls['lowpass'], [0, 1], [2000, 20000])
-        self.board[7].cutoff_frequency_hz = np.interp(self.controls['highpass'], [0, 1], [20, 1000])
-
-        # Pitch
-        self.board[8].semitones = np.interp(self.controls['pitch'], [0, 1], [-12, 12])
-
-        # Distortion
-        self.board[9].drive_db = self.controls['distortion'] * 24
-
-        # Bitcrush
-        bit_depth = np.interp(self.controls['bitcrush'], [0, 1], [16, 4])
-        for plugin in self.board:
-            if isinstance(plugin, Bitcrush):
-                plugin.bit_depth = float(max(4, bit_depth))
-                break
+        self.max_delay_samples = int(self.samplerate * 2.0)
+        self.echo_buffer = np.zeros((self.max_delay_samples, 2), dtype='float32')
+        self.echo_head = 0
 
     def callback(self, outdata, frames, time, status):
+        """
+        Real-time audio processing loop.
+        """
         if status:
             print(status)
 
@@ -101,60 +51,95 @@ class AudioEngine:
             outdata.fill(0)
             return
 
-        read_len = frames
+        self.current_volume += (self.target_volume - self.current_volume) * self.smooth_vol
+        self.current_pitch += (self.target_pitch - self.current_pitch) * self.smooth_pitch
+        self.current_pan += (self.target_pan - self.current_pan) * self.smooth_pan
+        self.current_echo += (self.target_echo - self.current_echo) * self.smooth_echo
+
+        safe_pitch = max(0.25, min(3.0, self.current_pitch))
+
+        read_len = int(frames * safe_pitch)
+
         current_pos_int = int(self.position)
 
-        # Read audio data and wrap around if we reach the end (loop playback)
         if current_pos_int + read_len <= len(self.data):
-            chunk = self.data[current_pos_int: current_pos_int + read_len]
-            self.position = current_pos_int + read_len
+            raw_chunk = self.data[current_pos_int: current_pos_int + read_len]
         else:
-            # Wrap: take remainder from end, then the rest from start
             part1 = self.data[current_pos_int:]
-            need = read_len - part1.shape[0]
+            need = read_len - len(part1)
             part2 = self.data[0:need]
-            if part1.size == 0:
-                chunk = part2
+
+            if len(part2) < need:
+                part2 = np.pad(part2, ((0, need - len(part2)), (0, 0)), 'wrap')
+
+            if len(part1) == 0:
+                raw_chunk = part2
             else:
-                chunk = np.vstack((part1, part2))
-            # New position is after the part we took from the start
-            self.position = need
+                raw_chunk = np.vstack((part1, part2))
 
-        # Process chunk through the pedalboard.
-        effected = self.board(chunk, self.samplerate, reset=False)
+        self.position += read_len
+        if self.position >= len(self.data):
+            self.position %= len(self.data)
 
-        # If plugin returned no output, fill silence
-        if effected is None or effected.size == 0:
-            outdata.fill(0)
-            return
+        if read_len != frames:
+            x_old = np.linspace(0, read_len - 1, read_len)
+            x_new = np.linspace(0, read_len - 1, frames)
 
-        # Ensure effected has the same number of channels as outdata
-        # outdata shape is (frames, channels)
-        if effected.ndim == 1:
-            effected = np.column_stack((effected, effected))
-
-        # If plugin returned fewer frames, copy what we have and zero-fill the rest
-        eff_len = effected.shape[0]
-        out_ch = outdata.shape[1]
-        # If plugin returned a different number of channels, adapt (truncate or duplicate)
-        if effected.shape[1] != out_ch:
-            if effected.shape[1] == 1 and out_ch == 2:
-                effected = np.tile(effected, (1, 2))
-            else:
-                # Truncate or pad channels as needed
-                if effected.shape[1] > out_ch:
-                    effected = effected[:, :out_ch]
-                else:
-                    # pad with zeros
-                    pad_width = out_ch - effected.shape[1]
-                    effected = np.hstack((effected, np.zeros((eff_len, pad_width), dtype=effected.dtype)))
-
-        if eff_len >= frames:
-            outdata[:] = effected[:frames]
+            l_res = np.interp(x_new, x_old, raw_chunk[:, 0])
+            r_res = np.interp(x_new, x_old, raw_chunk[:, 1])
+            chunk = np.column_stack((l_res, r_res))
         else:
-            outdata[:eff_len] = effected
-            outdata[eff_len:] = 0
-        return
+            chunk = raw_chunk.copy()
+
+        left_gain = 1.0
+        right_gain = 1.0
+
+        pan_intensity = 1.5
+        min_vol_floor = 0.1  # Quietest side never drops below 10%
+
+        if self.current_pan < 0.5:
+            # Pan Left -> Reduce Right
+            delta = (0.5 - self.current_pan) * 2.0  # 0.0 to 1.0
+            right_gain = max(min_vol_floor, 1.0 - (delta * pan_intensity))
+        else:
+            # Pan Right -> Reduce Left
+            delta = (self.current_pan - 0.5) * 2.0
+            left_gain = max(min_vol_floor, 1.0 - (delta * pan_intensity))
+
+        # Apply Volume & Pan
+        chunk[:, 0] *= (left_gain * self.current_volume)
+        chunk[:, 1] *= (right_gain * self.current_volume)
+
+        if self.current_echo > 0.05:
+            delay_seconds = 0.1 + (self.current_echo * 0.4)
+            delay_samples = int(self.samplerate * delay_seconds)
+
+            feedback = 0.3 + (self.current_echo * 0.3)
+
+            wet_mix = self.current_echo * 0.8
+
+            buffer_len = self.max_delay_samples
+            n_frames = len(chunk)
+
+            read_pos = (self.echo_head - delay_samples) % buffer_len
+
+            indices = (np.arange(n_frames) + read_pos) % buffer_len
+            delayed_signal = self.echo_buffer[indices]
+
+            chunk += delayed_signal * wet_mix
+
+            write_indices = (np.arange(n_frames) + self.echo_head) % buffer_len
+            self.echo_buffer[write_indices] = chunk * feedback
+
+            self.echo_head = (self.echo_head + n_frames) % buffer_len
+        else:
+            buffer_len = self.max_delay_samples
+            n_frames = len(chunk)
+            write_indices = (np.arange(n_frames) + self.echo_head) % buffer_len
+            self.echo_buffer[write_indices] = chunk * 0.0  # Clear buffer slowly
+            self.echo_head = (self.echo_head + n_frames) % buffer_len
+
+        outdata[:] = chunk
 
     def start(self):
         self.stream = sd.OutputStream(
@@ -171,53 +156,24 @@ class AudioEngine:
             self.stream.stop()
             self.stream.close()
 
-    # Gesture control functions (0.0 to 1.0 normalized)
-    def set_volume(self, value):
-        self.controls['volume'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
 
-    def set_pitch(self, value):
-        self.controls['pitch'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
+    def set_pitch(self, val):
+        self.target_pitch = float(val)
 
-    def set_reverb(self, value):
-        self.controls['reverb'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
+    def pitch_control(self, val):
+        self.set_pitch(val)
 
-    def set_delay(self, value):
-        self.controls['delay'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
+    def set_reverb(self, val):
+        self.target_echo = float(val)
 
-    def set_chorus(self, value):
-        self.controls['chorus'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
+    def echo_control(self, val):
+        self.target_echo = float(val)
 
-    def set_phaser(self, value):
-        self.controls['phaser'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
+    def set_volume(self, val):
+        self.target_volume = float(val)
 
-    def set_lowpass(self, value):
-        self.controls['lowpass'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
+    def volume_control(self, val):
+        self.set_volume(val)
 
-    def set_highpass(self, value):
-        self.controls['highpass'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
-
-    def set_distortion(self, value):
-        self.controls['distortion'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
-
-    def set_bitcrush(self, value):
-        self.controls['bitcrush'] = np.clip(value, 0.0, 1.0)
-        self.update_pedalboard()
-
-    def toggle_playback(self):
-        self.is_playing = not self.is_playing
-
-    def get_status(self):
-        return {
-            'position': self.position / len(self.data),
-            'playing': self.is_playing,
-            **{k: round(v, 3) for k, v in self.controls.items()}
-        }
+    def set_pan(self, val):
+        self.target_pan = float(val)
