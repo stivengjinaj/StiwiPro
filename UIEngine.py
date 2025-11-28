@@ -110,12 +110,16 @@ class UIEngine:
             cv2.putText(img, "No song loaded", (x + 15, song_box_y + 35), self.font, 0.7, (120, 120, 120), 1,
                         cv2.LINE_AA)
 
-    def draw_center_decks(self, img, rect):
+    def draw_center_decks(self, img, rect, deck1_current=None, deck2_current=None):
         x, y, w, h = rect
-        # Rectangle for decks area
         cv2.rectangle(img, (x, y), (x + w, y + h), (45, 45, 45), -1)
         cv2.putText(img, "Deck Controls Area", (x + 10, y + 30), self.font, 0.8, self.text_color, 1,
                     cv2.LINE_AA)
+
+        if deck1_current:
+            cv2.putText(img, deck1_current,(x+5, y+70), self.font, 0.8, self.text_color, 1, cv2.LINE_4)
+        if deck2_current:
+            cv2.putText(img, deck2_current,(x+50, y+70), self.font, 0.8, self.text_color, 1, cv2.LINE_4)
 
     def draw(self, deck1_song_list, deck2_song_list, deck1_current=None, deck2_current=None):
         img = np.full((self.height, self.width, 3), self.bg_color, dtype=np.uint8)
@@ -152,7 +156,7 @@ class UIEngine:
 
 
         # Draw center decks area
-        self.draw_center_decks(img, self.center_decks_rect)
+        self.draw_center_decks(img, self.center_decks_rect, deck1_current, deck2_current)
 
         # Draw dragging song if any
         if self.dragging_song:
@@ -190,11 +194,9 @@ class UIEngine:
             self.dragging_position = cursor_pos
             self.selected_song_deck2 = index
 
-    # Update dragging position
     def update_drag(self, cursor_pos):
         self.dragging_position = cursor_pos
 
-    # End dragging and return where dropped, None if no drop zone
     def drop_song(self, drop_zone):
         if self.dragging_song is not None:
             song = self.dragging_song

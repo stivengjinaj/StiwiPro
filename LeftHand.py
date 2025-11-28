@@ -29,6 +29,14 @@ class LeftHand:
         except (IndexError, AttributeError):
             return None
 
+    def get_index_tip_position(self):
+        """
+        Get the position of the index fingertip (landmark 8).
+        Returns (x, y) in normalized coordinates [0, 1], or None if unavailable.
+        """
+        index_tip = self.landmarks[8]
+        return index_tip.x, index_tip.y
+
     def _distance(self, lm1, lm2):
         """Compute Euclidean distance between two landmarks."""
         if lm1 is None or lm2 is None:
@@ -70,9 +78,8 @@ class LeftHand:
         if self.landmarks is None:
             return None
         try:
-            # Index 12 is middle finger tip
             middle_tip = self.landmarks[12]
-            return (middle_tip.x, middle_tip.y)
+            return middle_tip.x, middle_tip.y
         except (IndexError, AttributeError):
             return None
 
@@ -86,7 +93,7 @@ class LeftHand:
         if thumb is None or index is None:
             return None
         # Midpoint
-        return ((thumb[0] + index[0]) / 2, (thumb[1] + index[1]) / 2)
+        return (thumb[0] + index[0]) / 2, (thumb[1] + index[1]) / 2
 
     def detect_gestures(self):
         detected = []

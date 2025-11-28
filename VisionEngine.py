@@ -64,6 +64,9 @@ class VisionEngine:
             left_gestures = self.left_hand.detect_gestures()
             right_gestures = self.right_hand.detect_gestures()
 
+            self.handle_left_hover()
+            self.handle_left_drag_drop()
+
             self.handle_left_drag_drop()
 
             if self.left_hand.landmarks:
@@ -118,6 +121,26 @@ class VisionEngine:
             self.audio_engine.stop()
         self.audio_engine = AudioEngine(song_path)
         self.audio_engine.start()
+
+    def handle_left_hover(self):
+        """
+        Highlight song when index fingertip hovers over it (no pinch required).
+        Does NOT trigger drag or playback - only visual selection.
+        """
+        if self.left_hand.landmarks is None:
+            return
+
+        # Use index fingertip for hover detection
+        hover_pos = self.left_hand.get_index_tip_position()
+        if hover_pos is None:
+            return
+
+        # Check if hovering over a song in deck 1
+        song_idx = self._is_position_over_song(hover_pos, deck_num=1)
+
+        # Update selection for visual highlight (but don't drag or play)
+        if song_idx is not None and song_idx < len(self.ui.deck1_songs):
+            self.ui.selected_song_deck1 = song_idx
 
     def handle_gestures(self, left_gestures, right_gestures):
         if 'pinch_index_thumb' in right_gestures:
@@ -209,15 +232,20 @@ class VisionEngine:
     def handle_left_drag_drop(self):
         """
         Handle left-hand drag-and-drop for selecting and loading songs.
-        Pinch to start drag, release to drop and load song to Deck 1.
+        Pinch to start drag, drag while pinched, release in center to load.
         """
         if self.left_hand.landmarks is None:
-            self.prev_left_pinch = False  # Reset state if hand lost
+            self.prev_left_pinch = False
+            self.left_drag_active = False
+            self.left_drag_song_index = None
+            self.left_drag_song_name = None
+            self.ui.dragging_song = None
+            self.ui.dragging_from_deck = None
             return
 
         hand_pos = self.left_hand.get_pinch_position()
 
-        # Manual edge detection to bypass side-effects in LeftHand class methods
+        # Read current pinch state
         is_pinching = self.left_hand.is_currently_pinching
         pinch_started = is_pinching and not self.prev_left_pinch
         pinch_released = not is_pinching and self.prev_left_pinch
@@ -225,37 +253,59 @@ class VisionEngine:
         # Update state for next frame
         self.prev_left_pinch = is_pinching
 
+        # PINCH STARTED: Begin drag if over a song (but DON'T play yet)
         if pinch_started:
-            # Pinch just started: check if hand is over a song in deck1 list
             song_idx = self._is_position_over_song(hand_pos, deck_num=1)
             if song_idx is not None and song_idx < len(self.ui.deck1_songs):
                 self.left_drag_active = True
                 self.left_drag_song_index = song_idx
                 self.left_drag_song_name = self.ui.deck1_songs[song_idx]
-                print(f"Left hand: started dragging song '{self.left_drag_song_name}' (index {song_idx})")
+                self.ui.selected_song_deck1 = song_idx
 
+                # Start visual drag
+                if hand_pos:
+                    screen_x = int(hand_pos[0] * self.ui.width)
+                    screen_y = int(hand_pos[1] * self.ui.height)
+                    self.ui.drag_song(1, song_idx, (screen_x, screen_y))
+
+                print(f"Left hand: started dragging '{self.left_drag_song_name}'")
+
+        # WHILE PINCHING: Update drag position (but DON'T play yet)
         if is_pinching and self.left_drag_active:
-            # While pinching and dragging, update UI drag position
             if hand_pos:
-                # Convert normalized coords to screen pixels
                 screen_x = int(hand_pos[0] * self.ui.width)
                 screen_y = int(hand_pos[1] * self.ui.height)
                 self.ui.update_drag((screen_x, screen_y))
 
+        # PINCH RELEASED: Drop and load ONLY if dropped in center area
         if pinch_released and self.left_drag_active:
-            # Pinch released: drop song and load it to Deck 1
             if self.left_drag_song_name:
-                song_info = next((s for s in self.song_list if s['name'] == self.left_drag_song_name), None)
-                if song_info:
-                    print(f"Left hand: dropped and loading song '{self.left_drag_song_name}'")
-                    if self.audio_engine:
-                        self.audio_engine.stop()
-                    self.load_song_to_audio(song_info['path'], deck=1)
-                    self.deck1_current_song = self.left_drag_song_name
-                    self.deck1_current_path = song_info['path']
+                # Check if drop position is in center deck area
+                cx, cy, cw, ch = self.ui.center_decks_rect
+                drop_x, drop_y = self.ui.dragging_position
 
-            # Reset drag state
+                # Hit test: is drop position inside center deck rectangle?
+                in_center = (cx <= drop_x <= cx + cw) and (cy <= drop_y <= cy + ch)
+
+                if in_center:
+                    # ONLY load/play if dropped in center
+                    song_info = next(
+                        (s for s in self.song_list if s['name'] == self.left_drag_song_name),
+                        None
+                    )
+                    if song_info:
+                        print(f"✓ Dropped '{self.left_drag_song_name}' in center - loading to Deck 1")
+                        if self.audio_engine:
+                            self.audio_engine.stop()
+                        self.load_song_to_audio(song_info['path'], deck=1)
+                        self.deck1_current_song = self.left_drag_song_name
+                        self.deck1_current_path = song_info['path']
+                else:
+                    print(f"✗ Dropped '{self.left_drag_song_name}' outside center - cancelled")
+
             self.left_drag_active = False
             self.left_drag_song_index = None
             self.left_drag_song_name = None
             self.ui.dragging_song = None
+            self.ui.dragging_from_deck = None
+            self.ui.dragging_position = (0, 0)
