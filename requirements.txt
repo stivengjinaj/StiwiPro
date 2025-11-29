@@ -1,3 +1,5 @@
+pywavefront
+pyopengl
 pedalboard
 absl-py==2.3.1
 attrs==25.4.0
