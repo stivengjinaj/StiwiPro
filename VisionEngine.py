@@ -48,6 +48,8 @@ class VisionEngine:
         self.prev_left_pinch_for_slider = False
         self.prev_right_pinch_for_slider = False
 
+        self.avatar_mode = False
+
     def process(self):
         while self.running:
             ret, frame = self.cap.read()
@@ -70,14 +72,16 @@ class VisionEngine:
                     elif hand_label == 'Right':
                         self.right_hand.set_landmarks(hand_lms.landmark)
 
-            self.left_hand.detect_gestures()
-            self.right_hand.detect_gestures()
-            self.handle_play_pause()
-            self.handle_left_hover()
-            self.handle_right_hover()
-            self.handle_master_slider()
-            self.handle_drag_drop(self.left_hand, 1, 'left')
-            self.handle_drag_drop(self.right_hand, 2, 'right')
+            if not self.avatar_mode:
+                self.left_hand.detect_gestures()
+                self.right_hand.detect_gestures()
+                self.handle_play_pause()
+                self.handle_left_hover()
+                self.handle_right_hover()
+                self.handle_master_slider()
+                self.handle_avatar_activation()
+                self.handle_drag_drop(self.left_hand, 1, 'left')
+                self.handle_drag_drop(self.right_hand, 2, 'right')
 
             if results.multi_hand_landmarks:
                 for hand_lms in results.multi_hand_landmarks:
@@ -327,3 +331,48 @@ class VisionEngine:
             self.audio_engine_left.set_volume(left_vol)
         if self.audio_engine_right:
             self.audio_engine_right.set_volume(right_vol)
+
+
+    def handle_avatar_activation(self):
+        if not self.left_hand.landmarks or not self.right_hand.landmarks:
+            return
+
+        left_index_tip = self.left_hand.landmarks[8]
+        left_middle_tip = self.left_hand.landmarks[12]
+        left_first_knuckle = self.left_hand.landmarks[5]
+        left_second_knuckle = self.left_hand.landmarks[9]
+        left_wrist = self.left_hand.landmarks[0]
+
+        right_index_tip = self.right_hand.landmarks[8]
+        right_middle_tip = self.right_hand.landmarks[12]
+        right_first_knuckle = self.right_hand.landmarks[5]
+        right_second_knuckle = self.right_hand.landmarks[9]
+        right_wrist = self.right_hand.landmarks[0]
+
+        threshold_x = 0.07
+        threshold_y = 0.5
+
+        # Check if hands are attached
+        index_distance = abs(left_index_tip.x - right_index_tip.x)
+        middle_distance = abs(left_middle_tip.x - right_middle_tip.x)
+        knuckle_distance = abs(left_first_knuckle.x - right_first_knuckle.x)
+        wrist_distance = abs(left_wrist.x - right_wrist.x)
+
+        # Check if jutsu is performed
+        if (index_distance <= threshold_x and middle_distance <= threshold_x
+            and knuckle_distance <= threshold_x and wrist_distance <= threshold_x):
+
+            index_check = abs(left_index_tip.y - right_index_tip.y) < threshold_y
+            middle_check = abs(left_middle_tip.y - right_middle_tip.y) < threshold_y
+            first_knuckle_check = abs(left_first_knuckle.y - right_first_knuckle.y) < threshold_y
+            second_knuckle_check = abs(left_second_knuckle.y - right_second_knuckle.y) < threshold_y
+            wrist_check = abs(left_wrist.y - right_wrist.y) < threshold_y
+
+            if (index_check and middle_check and first_knuckle_check
+                    and second_knuckle_check and wrist_check):
+                # self.avatar_mode = True
+                print("AVATAR MODE")
+            else:
+                return
+        else:
+            return

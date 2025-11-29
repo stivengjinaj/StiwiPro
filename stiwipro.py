@@ -2,6 +2,7 @@ import os
 import glob
 
 from AudioEngine import AudioEngine
+from AvatarEngine import AvatarEngine
 from UIEngine import UIEngine
 from VisionEngine import VisionEngine
 
@@ -55,6 +56,10 @@ def main():
         vision.audio_engine_left.stop()
     if vision.audio_engine_right:
         vision.audio_engine_right.stop()
+
+    # avatar = AvatarEngine(audio_engine_left, audio_engine_right)
+    # avatar.load_model("humanoid.obj")
+    # avatar.run()
 
 
 if __name__ == "__main__":
