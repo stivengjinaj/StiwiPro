@@ -47,15 +47,29 @@ def is_position_over_song(hand_pos, ui, deck_num=1):
     return song_index
 
 
-def is_position_over_play_button(hand_pos, ui, button_x=640, button_y=500, button_radius=40):
+def is_position_over_play_button(hand_pos, ui, width=1280, height=720, button_radius=40):
     if hand_pos is None:
-        return False
+        return None
+
+    center_x = 640
+    center_y = 500
+
+    left_button_x = center_x // 2 - 100
+    right_button_x = center_x + 400
+    button_y = center_y - 100
 
     hand_pixel_x = hand_pos[0] * ui.width
     hand_pixel_y = hand_pos[1] * ui.height
 
-    dist_x = hand_pixel_x - button_x
+    dist_x_left = hand_pixel_x - left_button_x
+    dist_x_right = hand_pixel_x - right_button_x
     dist_y = hand_pixel_y - button_y
-    distance = (dist_x ** 2 + dist_y ** 2) ** 0.5
+    distance_left = (dist_x_left ** 2 + dist_y ** 2) ** 0.5
+    distance_right = (dist_x_right ** 2 + dist_y ** 2) ** 0.5
 
-    return distance <= button_radius
+    if distance_left <= button_radius:
+        return 'left'
+    elif distance_right <= button_radius:
+        return 'right'
+    else:
+        return None

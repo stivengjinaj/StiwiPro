@@ -8,7 +8,7 @@ from vision_helpers import is_position_over_song, is_position_over_play_button
 
 
 class VisionEngine:
-    def __init__(self, audio_engine, ui, song_list):
+    def __init__(self, audio_engine_left, audio_engine_right, ui, song_list):
         self.cap = cv2.VideoCapture(0)
         self.mp_drawing = mp.solutions.drawing_utils
         self.mp_hands = mp.solutions.hands
@@ -19,7 +19,8 @@ class VisionEngine:
         )
         self.left_hand = LeftHand()
         self.right_hand = RightHand()
-        self.audio_engine = audio_engine
+        self.audio_engine_left = audio_engine_left
+        self.audio_engine_right = audio_engine_right
         self.running = True
         self.ui = ui
         self.song_list = song_list
@@ -39,7 +40,8 @@ class VisionEngine:
         self.prev_right_pinch = False
         self.prev_left_pinch_for_play = False
         self.prev_right_pinch_for_play = False
-        self.is_playing = True
+        self.is_playing_left = False
+        self.is_playing_right = False
 
     def process(self):
         while self.running:
@@ -76,17 +78,23 @@ class VisionEngine:
                 for hand_lms in results.multi_hand_landmarks:
                     self.mp_drawing.draw_landmarks(frame, hand_lms, self.mp_hands.HAND_CONNECTIONS)
 
-            if self.audio_engine:
-                self.is_playing = not self.audio_engine.is_paused
+            if self.audio_engine_left:
+                self.is_playing_left = not self.audio_engine_left.is_paused
             else:
-                self.is_playing = False
+                self.is_playing_left = False
+
+            if self.audio_engine_right:
+                self.is_playing_right = not self.audio_engine_right.is_paused
+            else:
+                self.is_playing_right = False
 
             img = self.ui.draw(
                 self.ui.deck1_songs,
                 self.ui.deck2_songs,
                 self.deck1_current_song,
                 self.deck2_current_song,
-                self.is_playing
+                self.is_playing_left,
+                self.is_playing_right
             )
             frame_height, frame_width = frame.shape[:2]
             ui_resized = cv2.resize(img, (frame_width, frame_height))
@@ -101,10 +109,16 @@ class VisionEngine:
         cv2.destroyAllWindows()
 
     def load_song_to_audio(self, song_path, deck=1):
-        if self.audio_engine:
-            self.audio_engine.stop()
-        self.audio_engine = AudioEngine(song_path)
-        self.audio_engine.start()
+        if deck == 1:
+            if self.audio_engine_left:
+                self.audio_engine_left.stop()
+            self.audio_engine_left = AudioEngine(song_path)
+            self.audio_engine_left.start()
+        else:
+            if self.audio_engine_right:
+                self.audio_engine_right.stop()
+            self.audio_engine_right = AudioEngine(song_path)
+            self.audio_engine_right.start()
 
     def handle_left_hover(self):
         if self.left_hand.landmarks is None:
@@ -145,14 +159,24 @@ class VisionEngine:
         self.prev_right_pinch_for_play = is_pinching_right
         self.prev_left_pinch_for_play = is_pinching_left
 
-        over_button_right = is_position_over_play_button(right_pinch_pos, self.ui)
-        over_button_left = is_position_over_play_button(left_pinch_pos, self.ui)
+        button_right = is_position_over_play_button(right_pinch_pos, self.ui)
+        button_left = is_position_over_play_button(left_pinch_pos, self.ui)
 
-        if (pinch_started_right and over_button_right and not self.right_drag_active) or \
-           (pinch_started_left and over_button_left and not self.left_drag_active):
-            if self.audio_engine:
-                self.audio_engine.toggle_playback()
-                self.is_playing = not self.audio_engine.is_paused
+        if pinch_started_right and not self.right_drag_active:
+            if button_right == 'left' and self.audio_engine_left:
+                self.audio_engine_left.toggle_playback()
+                self.is_playing_left = not self.audio_engine_left.is_paused
+            elif button_right == 'right' and self.audio_engine_right:
+                self.audio_engine_right.toggle_playback()
+                self.is_playing_right = not self.audio_engine_right.is_paused
+
+        if pinch_started_left and not self.left_drag_active:
+            if button_left == 'left' and self.audio_engine_left:
+                self.audio_engine_left.toggle_playback()
+                self.is_playing_left = not self.audio_engine_left.is_paused
+            elif button_left == 'right' and self.audio_engine_right:
+                self.audio_engine_right.toggle_playback()
+                self.is_playing_right = not self.audio_engine_right.is_paused
 
     def handle_drag_drop(self, hand, deck_num, hand_name):
         if hand_name == 'left':
@@ -221,6 +245,10 @@ class VisionEngine:
                 screen_x = int(hand_pos[0] * self.ui.width)
                 screen_y = int(hand_pos[1] * self.ui.height)
                 self.ui.update_drag((screen_x, screen_y))
+                if not self.ui.dragging_song:
+                    drag_name = self.left_drag_song_name if hand_name == 'left' else self.right_drag_song_name
+                    if drag_name:
+                        self.ui.dragging_song = drag_name
 
         if pinch_released and drag_active:
             if drag_song_name:
@@ -235,8 +263,6 @@ class VisionEngine:
                         None
                     )
                     if song_info:
-                        if self.audio_engine:
-                            self.audio_engine.stop()
                         self.load_song_to_audio(song_info['path'], deck=deck_num)
                         if deck_num == 1:
                             self.deck1_current_song = drag_song_name
@@ -256,3 +282,4 @@ class VisionEngine:
             self.ui.dragging_song = None
             self.ui.dragging_from_deck = None
             self.ui.dragging_position = (0, 0)
+
