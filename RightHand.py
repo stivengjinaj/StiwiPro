@@ -58,7 +58,7 @@ class RightHand:
 
     def is_pinch_thumb_index(self):
         """Detect pinch between thumb and index finger."""
-        return self._is_pinch(4, 8, threshold=0.05)
+        return self._is_pinch(4, 8, threshold=0.07)
 
     def detect_gestures(self):
         detected = []

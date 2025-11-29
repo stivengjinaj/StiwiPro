@@ -1,7 +1,7 @@
 import cv2
 import numpy as np
 
-from ui_helpers import draw_play_button, draw_deck, draw_scrollable_list
+from ui_helpers import draw_play_button, draw_deck, draw_scrollable_list, draw_master_slider
 
 
 class UIEngine:
@@ -43,6 +43,7 @@ class UIEngine:
         self.dragging_song = None
         self.dragging_from_deck = None
         self.dragging_position = (0, 0)
+        self.master_slider_position = 0.0
 
     def set_song_list(self, deck, songs):
         if deck == 1:
@@ -104,9 +105,9 @@ class UIEngine:
                                                  playing_index=playing_idx2)
 
         self.draw_center_decks(img, self.center_decks_rect, deck1_current, deck2_current)
-
         draw_play_button(img, 640, 500, self.deck_bg_color, self.highlight_color, radius=40,
                          is_playing_left=is_playing_left, is_playing_right=is_playing_right)
+        draw_master_slider(img, 640, 500, self.master_slider_position)
 
         if self.dragging_song:
             pos = self.dragging_position

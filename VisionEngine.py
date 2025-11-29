@@ -4,7 +4,7 @@ import mediapipe as mp
 from AudioEngine import AudioEngine
 from LeftHand import LeftHand
 from RightHand import RightHand
-from vision_helpers import is_position_over_song, is_position_over_play_button
+from vision_helpers import is_position_over_song, is_position_over_play_button, is_position_over_master_slider
 
 
 class VisionEngine:
@@ -43,6 +43,11 @@ class VisionEngine:
         self.is_playing_left = False
         self.is_playing_right = False
 
+        self.slider_position = 0.0
+        self.slider_dragging = False
+        self.prev_left_pinch_for_slider = False
+        self.prev_right_pinch_for_slider = False
+
     def process(self):
         while self.running:
             ret, frame = self.cap.read()
@@ -65,12 +70,12 @@ class VisionEngine:
                     elif hand_label == 'Right':
                         self.right_hand.set_landmarks(hand_lms.landmark)
 
-            left_gestures = self.left_hand.detect_gestures()
-            right_gestures = self.right_hand.detect_gestures()
-
+            self.left_hand.detect_gestures()
+            self.right_hand.detect_gestures()
             self.handle_play_pause()
             self.handle_left_hover()
             self.handle_right_hover()
+            self.handle_master_slider()
             self.handle_drag_drop(self.left_hand, 1, 'left')
             self.handle_drag_drop(self.right_hand, 2, 'right')
 
@@ -283,3 +288,42 @@ class VisionEngine:
             self.ui.dragging_from_deck = None
             self.ui.dragging_position = (0, 0)
 
+    def handle_master_slider(self):
+        right_pinch_pos = self.right_hand.get_pinch_position() if self.right_hand.landmarks else None
+        left_pinch_pos = self.left_hand.get_pinch_position() if self.left_hand.landmarks else None
+
+        is_pinching_right = self.right_hand.is_currently_pinching if self.right_hand.landmarks else None
+        is_pinching_left = self.left_hand.is_currently_pinching if self.left_hand.landmarks else None
+
+        pinch_started_right = is_pinching_right and not self.prev_right_pinch_for_slider
+        pinch_started_left = is_pinching_left and not self.prev_left_pinch_for_slider
+        pinch_released = (not is_pinching_right and self.prev_right_pinch_for_slider) or (not is_pinching_left and self.prev_left_pinch_for_slider)
+
+        self.prev_right_pinch_for_slider = is_pinching_right
+        self.prev_left_pinch_for_slider = is_pinching_left
+
+        if pinch_started_right or pinch_started_left:
+            check_pos = right_pinch_pos if pinch_started_right else left_pinch_pos
+            if is_position_over_master_slider(check_pos, self.ui, self.slider_position):
+                self.slider_dragging = True
+
+        if self.slider_dragging and (is_pinching_right or is_pinching_left):
+            active_hand_pos = right_pinch_pos if is_pinching_right else left_pinch_pos
+            if active_hand_pos:
+                center_x = 640
+                hand_pixel_x = active_hand_pos[0] * self.ui.width
+                new_slider_pos = (hand_pixel_x - center_x) / 150.0
+                self.slider_position = max(-1.0, min(1.0, new_slider_pos))
+                self.ui.master_slider_position = new_slider_pos
+
+        if pinch_released:
+            self.slider_dragging = False
+
+        left_vol = (1.0 - self.slider_position) / 2.0
+        right_vol = (1.0 + self.slider_position) / 2.0
+
+
+        if self.audio_engine_left:
+            self.audio_engine_left.set_volume(left_vol)
+        if self.audio_engine_right:
+            self.audio_engine_right.set_volume(right_vol)

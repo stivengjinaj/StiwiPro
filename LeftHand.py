@@ -52,11 +52,11 @@ class LeftHand:
 
     def is_pinch_thumb_index(self):
         """Detect pinch between thumb and index finger."""
-        return self._is_pinch(4, 8, threshold=0.05)
+        return self._is_pinch(4, 8, threshold=0.07)
 
     def is_pinch_middle_thumb(self):
         """Detect pinch between thumb and middle finger."""
-        return self._is_pinch(4, 12, threshold=0.05)
+        return self._is_pinch(4, 12, threshold=0.07)
 
     def is_pinch_started(self):
         """Detect rising edge: pinch just started (was not pinching, now is)."""

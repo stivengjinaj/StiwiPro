@@ -136,3 +136,12 @@ def draw_play_button(img, center_x, center_y, deck_bg_color, highlight_color, ra
 
         triangle = np.array([pt1, pt2, pt3], np.int32)
         cv2.fillPoly(img, [triangle], highlight_color)
+
+def draw_master_slider(img, center_x, center_y, slider_position=0.0):
+    cv2.rectangle(img, (center_x - 150, center_y - 100), (center_x + 150, center_y - 100), (42,42,210), thickness=30)
+    knob_x = center_x + (slider_position * 150)
+    if knob_x <= (center_x - 150):
+        knob_x = center_x - 150
+    elif knob_x >= (center_x + 150):
+        knob_x = center_x + 150
+    cv2.circle(img, (knob_x.__int__(), center_y-100), 25, (255, 255, 255), -1)
