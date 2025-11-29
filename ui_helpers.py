@@ -71,42 +71,68 @@ def draw_deck(img, rect, title, deck_bg_color, font, text_color, highlight_color
                     cv2.LINE_AA)
 
 
-def draw_play_button(img, center_x, center_y, deck_bg_color, highlight_color, radius=30, is_playing=False):
-    # Draw circle background
-    cv2.circle(img, (center_x, center_y), radius, deck_bg_color, -1)
-    cv2.circle(img, (center_x, center_y), radius, highlight_color, 2)
+def draw_play_button(img, center_x, center_y, deck_bg_color, highlight_color, radius=30, is_playing_left=False, is_playing_right=False):
+    center_x_left = center_x // 2 - 100
+    center_x_right = center_x + 400
+    center_y_both = center_y - 100
 
-    if is_playing:
-        # Draw PAUSE icon (two vertical bars)
+    cv2.circle(img, (center_x_left, center_y_both), radius, deck_bg_color, -1)
+    cv2.circle(img, (center_x_left, center_y_both), radius, highlight_color, 2)
+    cv2.circle(img, (center_x_right, center_y_both), radius, deck_bg_color, -1)
+    cv2.circle(img, (center_x_right, center_y_both), radius, highlight_color, 2)
+
+    if is_playing_left:
         bar_width = int(radius * 0.25)
         bar_height = int(radius * 0.8)
         bar_spacing = int(radius * 0.3)
 
-        # Left bar
-        left_x = center_x - bar_spacing
+        left_x = center_x_left - bar_spacing
         cv2.rectangle(img,
-                      (left_x - bar_width // 2, center_y - bar_height // 2),
-                      (left_x + bar_width // 2, center_y + bar_height // 2),
+                      (left_x - bar_width // 2, center_y_both - bar_height // 2),
+                      (left_x + bar_width // 2, center_y_both + bar_height // 2),
                       highlight_color, -1)
 
-        # Right bar
-        right_x = center_x + bar_spacing
+        right_x = center_x_left + bar_spacing
         cv2.rectangle(img,
-                      (right_x - bar_width // 2, center_y - bar_height // 2),
-                      (right_x + bar_width // 2, center_y + bar_height // 2),
+                      (right_x - bar_width // 2, center_y_both - bar_height // 2),
+                      (right_x + bar_width // 2, center_y_both + bar_height // 2),
                       highlight_color, -1)
     else:
-        # Draw PLAY icon (right-pointing triangle)
         triangle_height = int(radius * 0.8)
         triangle_width = int(radius * 0.7)
-
-        # Offset slightly to the right for visual centering
         offset = int(radius * 0.1)
 
-        # Triangle vertices
-        pt1 = (center_x - triangle_width // 2 + offset, center_y - triangle_height // 2)
-        pt2 = (center_x - triangle_width // 2 + offset, center_y + triangle_height // 2)
-        pt3 = (center_x + triangle_width // 2 + offset, center_y)
+        pt1 = (center_x_left - triangle_width // 2 + offset, center_y_both - triangle_height // 2)
+        pt2 = (center_x_left - triangle_width // 2 + offset, center_y_both + triangle_height // 2)
+        pt3 = (center_x_left + triangle_width // 2 + offset, center_y_both)
+
+        triangle = np.array([pt1, pt2, pt3], np.int32)
+        cv2.fillPoly(img, [triangle], highlight_color)
+
+    if is_playing_right:
+        bar_width = int(radius * 0.25)
+        bar_height = int(radius * 0.8)
+        bar_spacing = int(radius * 0.3)
+
+        left_x = center_x_right - bar_spacing
+        cv2.rectangle(img,
+                      (left_x - bar_width // 2, center_y_both - bar_height // 2),
+                      (left_x + bar_width // 2, center_y_both + bar_height // 2),
+                      highlight_color, -1)
+
+        right_x = center_x_right + bar_spacing
+        cv2.rectangle(img,
+                      (right_x - bar_width // 2, center_y_both - bar_height // 2),
+                      (right_x + bar_width // 2, center_y_both + bar_height // 2),
+                      highlight_color, -1)
+    else:
+        triangle_height = int(radius * 0.8)
+        triangle_width = int(radius * 0.7)
+        offset = int(radius * 0.1)
+
+        pt1 = (center_x_right - triangle_width // 2 + offset, center_y_both - triangle_height // 2)
+        pt2 = (center_x_right - triangle_width // 2 + offset, center_y_both + triangle_height // 2)
+        pt3 = (center_x_right + triangle_width // 2 + offset, center_y_both)
 
         triangle = np.array([pt1, pt2, pt3], np.int32)
         cv2.fillPoly(img, [triangle], highlight_color)

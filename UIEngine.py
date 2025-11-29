@@ -64,7 +64,8 @@ class UIEngine:
         if deck2_current:
             cv2.putText(img, f"Deck 2: {deck2_current}", (x+5, y+100), self.font, 0.7, self.highlight_color, 2, cv2.LINE_AA)
 
-    def draw(self, deck1_song_list, deck2_song_list, deck1_current=None, deck2_current=None, is_playing=False):
+    def draw(self, deck1_song_list, deck2_song_list, deck1_current=None, deck2_current=None, is_playing_left=False,
+             is_playing_right=False):
         img = np.full((self.height, self.width, 3), self.bg_color, dtype=np.uint8)
 
         try:
@@ -76,8 +77,10 @@ class UIEngine:
         except Exception:
             playing_idx2 = None
 
-        draw_deck(img, self.deck1_rect, "Deck 1", self.deck_bg_color, self.font, self.text_color, self.highlight_color, deck1_current)
-        draw_deck(img, self.deck2_rect, "Deck 2", self.deck_bg_color, self.font, self.text_color, self.highlight_color, deck2_current)
+        draw_deck(img, self.deck1_rect, "Deck 1", self.deck_bg_color, self.font, self.text_color, self.highlight_color,
+                  deck1_current)
+        draw_deck(img, self.deck2_rect, "Deck 2", self.deck_bg_color, self.font, self.text_color, self.highlight_color,
+                  deck2_current)
 
         list_offset = 100
         d1x, d1y, d1w, d1h = self.deck1_rect
@@ -85,18 +88,25 @@ class UIEngine:
         list_rect1 = (d1x, d1y + list_offset, d1w, max(0, d1h - list_offset))
         list_rect2 = (d2x, d2y + list_offset, d2w, max(0, d2h - list_offset))
 
-        self.deck1_scroll = draw_scrollable_list(img, list_rect1, deck1_song_list, self.deck1_scroll, self.deck_bg_color,
+        self.deck1_scroll = draw_scrollable_list(img, list_rect1, deck1_song_list, self.deck1_scroll,
+                                                 self.deck_bg_color,
                                                  self.list_item_height, self.scrollbar_width, self.playing_color,
-                                                 self.selection_color, self.scrollbar_color, self.scrollbar_handle_color,
-                                                 self.font, self.text_color, self.selected_song_deck1, playing_index=playing_idx1)
-        self.deck2_scroll = draw_scrollable_list(img, list_rect2, deck2_song_list, self.deck2_scroll, self.deck_bg_color,
+                                                 self.selection_color, self.scrollbar_color,
+                                                 self.scrollbar_handle_color,
+                                                 self.font, self.text_color, self.selected_song_deck1,
+                                                 playing_index=playing_idx1)
+        self.deck2_scroll = draw_scrollable_list(img, list_rect2, deck2_song_list, self.deck2_scroll,
+                                                 self.deck_bg_color,
                                                  self.list_item_height, self.scrollbar_width, self.playing_color,
-                                                 self.selection_color, self.scrollbar_color, self.scrollbar_handle_color,
-                                                 self.font, self.text_color, self.selected_song_deck2, playing_index=playing_idx2)
+                                                 self.selection_color, self.scrollbar_color,
+                                                 self.scrollbar_handle_color,
+                                                 self.font, self.text_color, self.selected_song_deck2,
+                                                 playing_index=playing_idx2)
 
         self.draw_center_decks(img, self.center_decks_rect, deck1_current, deck2_current)
 
-        draw_play_button(img, 640, 500, self.deck_bg_color, self.highlight_color, radius=40, is_playing=is_playing)
+        draw_play_button(img, 640, 500, self.deck_bg_color, self.highlight_color, radius=40,
+                         is_playing_left=is_playing_left, is_playing_right=is_playing_right)
 
         if self.dragging_song:
             pos = self.dragging_position
