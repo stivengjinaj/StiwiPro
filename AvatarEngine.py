@@ -97,22 +97,32 @@ class AvatarEngine:
         right_wrist = self.landmarks[self.mp_pose.PoseLandmark.RIGHT_WRIST.value]
         left_shoulder = self.landmarks[self.mp_pose.PoseLandmark.LEFT_SHOULDER.value]
         right_shoulder = self.landmarks[self.mp_pose.PoseLandmark.RIGHT_SHOULDER.value]
+        left_elbow = self.landmarks[self.mp_pose.PoseLandmark.LEFT_ELBOW.value]
+        right_elbow = self.landmarks[self.mp_pose.PoseLandmark.RIGHT_ELBOW.value]
 
-        threshold_x = 0.07
-        threshold_y = 0.5
+        # Check if arms are horizontally extended (T-pose)
+        # Wrists should be at similar Y level as shoulders
+        left_arm_horizontal = abs(left_wrist.y - left_shoulder.y) < 0.15
+        right_arm_horizontal = abs(right_wrist.y - right_shoulder.y) < 0.15
 
-        wrists_close_x = abs(left_wrist.x - right_wrist.x) <= threshold_x
-        wrists_close_y = abs(left_wrist.y - right_wrist.y) <= threshold_y
-
-        wrists_above_shoulders = (left_wrist.y < left_shoulder.y and
-                                  right_wrist.y < right_shoulder.y)
-
-        if wrists_close_x and wrists_close_y and wrists_above_shoulders:
-            self.exit_gesture_counter += 1
-            if self.exit_gesture_counter >= 15:
-                return True
-        else:
+        if not left_arm_horizontal or not right_arm_horizontal:
             self.exit_gesture_counter = 0
+            return False
+
+        # Check if arms are extended outward
+        left_arm_extended = left_wrist.x < left_shoulder.x
+        right_arm_extended = right_wrist.x > right_shoulder.x
+
+        if not left_arm_extended or not right_arm_extended:
+            self.exit_gesture_counter = 0
+            return False
+
+        # All conditions met
+        self.exit_gesture_counter += 1
+
+        if self.exit_gesture_counter >= 20:
+            print("T-Pose detected - exiting avatar mode")
+            return True
 
         return False
 

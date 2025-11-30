@@ -335,41 +335,40 @@ class VisionEngine:
         if not self.left_hand.landmarks or not self.right_hand.landmarks:
             return
 
-        left_index_tip = self.left_hand.landmarks[8]
-        left_middle_tip = self.left_hand.landmarks[12]
-        left_first_knuckle = self.left_hand.landmarks[5]
-        left_second_knuckle = self.left_hand.landmarks[9]
-        left_wrist = self.left_hand.landmarks[0]
+        index_left_pip = self.left_hand.landmarks[6]
+        index_left_tip = self.left_hand.landmarks[8]
+        middle_left_pip = self.left_hand.landmarks[10]
+        middle_left_tip = self.left_hand.landmarks[12]
 
-        right_index_tip = self.right_hand.landmarks[8]
-        right_middle_tip = self.right_hand.landmarks[12]
-        right_first_knuckle = self.right_hand.landmarks[5]
-        right_second_knuckle = self.right_hand.landmarks[9]
-        right_wrist = self.right_hand.landmarks[0]
+        index_right_pip = self.right_hand.landmarks[6]
+        index_right_tip = self.right_hand.landmarks[8]
+        middle_right_pip = self.right_hand.landmarks[10]
+        middle_right_tip = self.right_hand.landmarks[12]
 
-        threshold_x = 0.07
-        threshold_y = 0.5
+        # Check X shape by using PIP x-axis
+        index_pip_dist_x = abs(index_left_pip.x - index_right_pip.x)
+        index_pip_dist_y = abs(index_left_pip.y - index_right_pip.y)
+        middle_pip_dist_x = abs(middle_left_pip.x - middle_right_pip.x)
+        middle_pip_dist_y = abs(middle_left_pip.y - middle_right_pip.y)
 
-        # Check if hands are attached
-        index_distance = abs(left_index_tip.x - right_index_tip.x)
-        middle_distance = abs(left_middle_tip.x - right_middle_tip.x)
-        knuckle_distance = abs(left_first_knuckle.x - right_first_knuckle.x)
-        wrist_distance = abs(left_wrist.x - right_wrist.x)
+        threshold = 0.09
 
-        # Check if jutsu is performed
-        if (index_distance <= threshold_x and middle_distance <= threshold_x
-            and knuckle_distance <= threshold_x and wrist_distance <= threshold_x):
-
-            index_check = abs(left_index_tip.y - right_index_tip.y) < threshold_y
-            middle_check = abs(left_middle_tip.y - right_middle_tip.y) < threshold_y
-            first_knuckle_check = abs(left_first_knuckle.y - right_first_knuckle.y) < threshold_y
-            second_knuckle_check = abs(left_second_knuckle.y - right_second_knuckle.y) < threshold_y
-            wrist_check = abs(left_wrist.y - right_wrist.y) < threshold_y
-
-            if (index_check and middle_check and first_knuckle_check
-                    and second_knuckle_check and wrist_check):
-                self.avatar_mode = True
-            else:
-                return
-        else:
+        if (index_pip_dist_x > threshold or middle_pip_dist_x > threshold
+                or index_pip_dist_y > threshold or middle_pip_dist_y > threshold):
             return
+
+        # Check horizontal alignment
+        index_tip_dist = abs(index_right_tip.y - index_right_pip.y)
+        middle_tip_dist = abs(middle_right_tip.y - middle_right_pip.y)
+
+        if index_tip_dist > threshold or middle_tip_dist > threshold:
+            return
+
+        # Check vertical alignment
+        index_tip_dist = abs(index_left_tip.x - index_left_pip.x)
+        middle_tip_dist = abs(middle_left_tip.x - middle_left_pip.x)
+
+        if index_tip_dist > threshold or middle_tip_dist > threshold:
+            return
+
+        self.avatar_mode = True
