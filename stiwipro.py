@@ -1,6 +1,8 @@
 import os
 import glob
 
+import cv2
+
 from AudioEngine import AudioEngine
 from AvatarEngine import AvatarEngine
 from UIEngine import UIEngine
@@ -50,16 +52,35 @@ def main():
     audio_engine_right = None
 
     vision = VisionEngine(audio_engine_left, audio_engine_right, ui, song_list)
-    vision.process()
+    avatar = None
+
+    running = True
+    while running:
+        if not vision.avatar_mode:
+            running = vision.process()
+            if not running:
+                break
+        else:
+            if avatar is None:
+                avatar = AvatarEngine(vision.audio_engine_left, vision.audio_engine_right)
+                avatar.load_model("MaleTron_Lowpoly.obj")
+            else:
+                avatar.audio_engine_left = vision.audio_engine_left
+                avatar.audio_engine_right = vision.audio_engine_right
+
+            vision.cap.release()
+            cv2.destroyAllWindows()
+
+            avatar.run()
+
+            vision.cap = cv2.VideoCapture(0)
+
+            vision.avatar_mode = False
 
     if vision.audio_engine_left:
         vision.audio_engine_left.stop()
     if vision.audio_engine_right:
         vision.audio_engine_right.stop()
-
-    # avatar = AvatarEngine(audio_engine_left, audio_engine_right)
-    # avatar.load_model("humanoid.obj")
-    # avatar.run()
 
 
 if __name__ == "__main__":

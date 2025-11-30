@@ -21,7 +21,7 @@ class VisionEngine:
         self.right_hand = RightHand()
         self.audio_engine_left = audio_engine_left
         self.audio_engine_right = audio_engine_right
-        self.running = True
+        # self.running = True
         self.ui = ui
         self.song_list = song_list
         self.deck1_current_song = None
@@ -51,71 +51,69 @@ class VisionEngine:
         self.avatar_mode = False
 
     def process(self):
-        while self.running:
-            ret, frame = self.cap.read()
-            if not ret:
-                break
+        ret, frame = self.cap.read()
+        if not ret:
+            return False
 
-            frame = cv2.flip(frame, 1)
-            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = self.hands_processor.process(frame_rgb)
+        frame = cv2.flip(frame, 1)
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.hands_processor.process(frame_rgb)
 
-            self.left_hand.set_landmarks(None)
-            self.right_hand.set_landmarks(None)
+        self.left_hand.set_landmarks(None)
+        self.right_hand.set_landmarks(None)
 
-            if results.multi_handedness and results.multi_hand_landmarks:
-                for hand_lms, hand_info in zip(results.multi_hand_landmarks, results.multi_handedness):
-                    hand_label = hand_info.classification[0].label
+        if results.multi_handedness and results.multi_hand_landmarks:
+            for hand_lms, hand_info in zip(results.multi_hand_landmarks, results.multi_handedness):
+                hand_label = hand_info.classification[0].label
 
-                    if hand_label == 'Left':
-                        self.left_hand.set_landmarks(hand_lms.landmark)
-                    elif hand_label == 'Right':
-                        self.right_hand.set_landmarks(hand_lms.landmark)
+                if hand_label == 'Left':
+                    self.left_hand.set_landmarks(hand_lms.landmark)
+                elif hand_label == 'Right':
+                    self.right_hand.set_landmarks(hand_lms.landmark)
 
-            if not self.avatar_mode:
-                self.left_hand.detect_gestures()
-                self.right_hand.detect_gestures()
-                self.handle_play_pause()
-                self.handle_left_hover()
-                self.handle_right_hover()
-                self.handle_master_slider()
-                self.handle_avatar_activation()
-                self.handle_drag_drop(self.left_hand, 1, 'left')
-                self.handle_drag_drop(self.right_hand, 2, 'right')
+        if not self.avatar_mode:
+            self.left_hand.detect_gestures()
+            self.right_hand.detect_gestures()
+            self.handle_avatar_activation()
+            self.handle_play_pause()
+            self.handle_left_hover()
+            self.handle_right_hover()
+            self.handle_master_slider()
+            self.handle_drag_drop(self.left_hand, 1, 'left')
+            self.handle_drag_drop(self.right_hand, 2, 'right')
 
-            if results.multi_hand_landmarks:
-                for hand_lms in results.multi_hand_landmarks:
-                    self.mp_drawing.draw_landmarks(frame, hand_lms, self.mp_hands.HAND_CONNECTIONS)
+        if results.multi_hand_landmarks:
+            for hand_lms in results.multi_hand_landmarks:
+                self.mp_drawing.draw_landmarks(frame, hand_lms, self.mp_hands.HAND_CONNECTIONS)
 
-            if self.audio_engine_left:
-                self.is_playing_left = not self.audio_engine_left.is_paused
-            else:
-                self.is_playing_left = False
+        if self.audio_engine_left:
+            self.is_playing_left = not self.audio_engine_left.is_paused
+        else:
+            self.is_playing_left = False
 
-            if self.audio_engine_right:
-                self.is_playing_right = not self.audio_engine_right.is_paused
-            else:
-                self.is_playing_right = False
+        if self.audio_engine_right:
+            self.is_playing_right = not self.audio_engine_right.is_paused
+        else:
+            self.is_playing_right = False
 
-            img = self.ui.draw(
-                self.ui.deck1_songs,
-                self.ui.deck2_songs,
-                self.deck1_current_song,
-                self.deck2_current_song,
-                self.is_playing_left,
-                self.is_playing_right
-            )
-            frame_height, frame_width = frame.shape[:2]
-            ui_resized = cv2.resize(img, (frame_width, frame_height))
+        img = self.ui.draw(
+            self.ui.deck1_songs,
+            self.ui.deck2_songs,
+            self.deck1_current_song,
+            self.deck2_current_song,
+            self.is_playing_left,
+            self.is_playing_right
+        )
+        frame_height, frame_width = frame.shape[:2]
+        ui_resized = cv2.resize(img, (frame_width, frame_height))
 
-            final = cv2.addWeighted(frame, 0.4, ui_resized, 0.6, 0)
-            cv2.imshow("Stiwi Pro", final)
-            key = cv2.waitKey(1) & 0xFF
-            if key == 27:
-                self.running = False
+        final = cv2.addWeighted(frame, 0.4, ui_resized, 0.6, 0)
+        cv2.imshow("Stiwi Pro", final)
+        key = cv2.waitKey(1) & 0xFF
+        if key == 27:
+            return False
 
-        self.cap.release()
-        cv2.destroyAllWindows()
+        return True
 
     def load_song_to_audio(self, song_path, deck=1):
         if deck == 1:
@@ -370,8 +368,7 @@ class VisionEngine:
 
             if (index_check and middle_check and first_knuckle_check
                     and second_knuckle_check and wrist_check):
-                # self.avatar_mode = True
-                print("AVATAR MODE")
+                self.avatar_mode = True
             else:
                 return
         else:
